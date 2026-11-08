@@ -2,15 +2,13 @@
   "name": "discord-community-bot",
   "version": "1.0.0",
   "private": true,
-  "description": "Discord community bot with voice and message leaderboards, an authenticated admin dashboard, and NxtCoin economy.",
+  "description": "Discord community bot with voice and message leaderboards, an authenticated admin dashboard, and NxtCoin arcade games.",
   "main": "src/index.js",
   "scripts": {
-    "start": "node --require ./src/rank-emojis.js --require ./src/economy.js --require ./src/economy-admin.js src/index.js",
-    "dev": "node --watch --require ./src/rank-emojis.js --require ./src/economy.js --require ./src/economy-admin.js src/index.js"
+    "start": "node --require ./src/rank-emojis.js --require ./src/economy.js --require ./src/economy-games.js src/index.js",
+    "dev": "node --watch --require ./src/rank-emojis.js --require ./src/economy.js --require ./src/economy-games.js src/index.js"
   },
-  "engines": {
-    "node": ">=22"
-  },
+  "engines": { "node": ">=22" },
   "dependencies": {
     "better-sqlite3": "^12.2.0",
     "discord.js": "^14.21.0",
