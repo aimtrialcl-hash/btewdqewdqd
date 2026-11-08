@@ -5,7 +5,7 @@ const { Client, EmbedBuilder } = require('discord.js');
 const { db } = require('./database');
 
 const COIN = '🪙 NxtCoin';
-const COLOR = 0x5865F2;
+const COLOR = 0x7C5CFC;
 const FISH_COOLDOWN = 15 * 60 * 1000;
 const SCAVENGE_COOLDOWN = 60 * 60 * 1000;
 
@@ -25,9 +25,10 @@ const getBalance = db.prepare('SELECT balance FROM economy_accounts WHERE guild_
 const award = db.prepare('UPDATE economy_accounts SET balance=balance+? WHERE guild_id=? AND user_id=?');
 
 function prefix(guildId) { return getPrefix.get(guildId)?.prefix || '!'; }
-function makeEmbed(title, description, user) {
-  return new EmbedBuilder().setColor(COLOR).setTitle(title).setDescription(description)
-    .setThumbnail(user.displayAvatarURL({ size: 128 })).setTimestamp().setFooter({ text: 'NxtCoin • Community economy' });
+function makeEmbed(title, description, user, color = COLOR) {
+  return new EmbedBuilder().setColor(color).setTitle(title).setDescription(description)
+    .setThumbnail(user.displayAvatarURL({ size: 128 })).setTimestamp()
+    .setFooter({ text: 'NxtCoin • Community economy' });
 }
 function waitText(ms) {
   const minutes = Math.max(1, Math.ceil(ms / 60000));
@@ -49,11 +50,31 @@ function tryEarn(guildId, userId, now, field, cooldown, min, max) {
   return update();
 }
 
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function animateEarning(message, user, config, result) {
+  const steps = config.frames;
+  const animation = await message.reply({
+    embeds: [makeEmbed(config.title, `> ${steps[0]}\n\n\`\`\`\n${config.bar[0]}░░░░\n\`\`\`\n**NxtCoin expedition started…**`, user)]
+  });
+  for (let i = 1; i < steps.length; i++) {
+    await pause(650);
+    const filled = '▰'.repeat(i + 1);
+    const empty = '░'.repeat(Math.max(0, 5 - i - 1));
+    await animation.edit({
+      embeds: [makeEmbed(config.title, `> ${steps[i]}\n\n\`\`\`\n${filled}${empty}\n\`\`\`\n**Searching for NxtCoin…**`, user)]
+    }).catch(() => {});
+  }
+  await pause(450);
+  return animation.edit({
+    embeds: [makeEmbed(config.successTitle, `> ${config.successEmoji} ${config.successText}\n\n━━━━━━━━━━━━━━━━━━━━\n✨ **+${result.amount.toLocaleString()} ${COIN}**\n👛 Wallet: **${result.balance.toLocaleString()} ${COIN}**\n━━━━━━━━━━━━━━━━━━━━`, user, 0x57F287)]
+  });
+}
+
 async function handleEarningCommand(message) {
   if (!message.guild || message.author.bot || message.system) return;
   const currentPrefix = prefix(message.guild.id);
   if (!message.content.startsWith(currentPrefix)) return;
-  const [name, ...args] = message.content.slice(currentPrefix.length).trim().split(/\s+/);
+  const [name] = message.content.slice(currentPrefix.length).trim().split(/\s+/);
   if (!name) return;
   const command = name.toLowerCase();
   const user = message.author;
@@ -66,12 +87,22 @@ async function handleEarningCommand(message) {
       `🔎 **${currentPrefix}scavenge** — 40–160 NxtCoin, once every hour`,
       `🎰 **${currentPrefix}slots amount** / **${currentPrefix}coinflip amount heads|tails** — games can win or lose coins`
     ].join('\n');
-    return message.reply({ embeds: [makeEmbed('✨ Ways to earn NxtCoin', `${guide}\n\nCheck your wallet with **${currentPrefix}balance**. Use **${currentPrefix}help** to see all economy commands.`, user)] });
+    return message.reply({ embeds: [makeEmbed('✨ NxtCoin • Ways to earn', `Collect, work, explore, and play!\n\n${guide}\n\nCheck your wallet with **${currentPrefix}balance**. Use **${currentPrefix}help** to see all economy commands.`, user)] });
   }
 
   const configs = {
-    fish: { field: 'fish_at', cooldown: FISH_COOLDOWN, min: 15, max: 90, title: '🎣 Fishing haul', verb: 'reeled in a shiny catch' },
-    scavenge: { field: 'scavenge_at', cooldown: SCAVENGE_COOLDOWN, min: 40, max: 160, title: '🔎 Scavenging find', verb: 'found a forgotten NxtCoin stash' }
+    fish: {
+      field: 'fish_at', cooldown: FISH_COOLDOWN, min: 15, max: 90,
+      title: '🎣 NxtCoin fishing trip', successTitle: '🐟 Catch of the day!',
+      successEmoji: '✨', successText: 'A shiny catch turned into NxtCoin!',
+      bar: ['🎣', '🌊', '🐟'], frames: ['🎣 Cast your line…', '🌊 Something is nibbling!', '🐟 Reel it in!']
+    },
+    scavenge: {
+      field: 'scavenge_at', cooldown: SCAVENGE_COOLDOWN, min: 40, max: 160,
+      title: '🔎 NxtCoin scavenger hunt', successTitle: '💎 Treasure uncovered!',
+      successEmoji: '🎉', successText: 'You found a forgotten NxtCoin stash!',
+      bar: ['🔎', '🗺️', '✨'], frames: ['🔎 Scanning the area…', '🗺️ A clue appears on the map!', '✨ A hidden cache is glowing!']
+    }
   };
   const config = configs[command];
   if (!config) return;
@@ -79,12 +110,12 @@ async function handleEarningCommand(message) {
   try {
     const result = tryEarn(message.guild.id, user.id, Date.now(), config.field, config.cooldown, config.min, config.max);
     if (!result.ok) {
-      return message.reply({ embeds: [makeEmbed('⏳ Come back later', `You can **${command}** again in **${waitText(result.wait)}**.`, user)] });
+      return message.reply({ embeds: [makeEmbed('⏳ Expedition cooldown', `You can **${command}** again in **${waitText(result.wait)}**.\n\nWhile you wait, try **${currentPrefix}work** or **${currentPrefix}daily**.`, user, 0xF0B232)] });
     }
-    return message.reply({ embeds: [makeEmbed(config.title, `You ${config.verb} and earned **${result.amount.toLocaleString()} ${COIN}**!\n\nWallet balance: **${result.balance.toLocaleString()} ${COIN}**`, user)] });
+    await animateEarning(message, user, config, result);
   } catch (error) {
     console.error('NxtCoin earning command failed:', error);
-    return message.reply({ embeds: [makeEmbed('⚠️ Earning failed', 'Could not award NxtCoin right now. Please try again later.', user)] }).catch(() => {});
+    return message.reply({ embeds: [makeEmbed('⚠️ Earning failed', 'Could not award NxtCoin right now. Please try again later.', user, 0xED4245)] }).catch(() => {});
   }
 }
 
