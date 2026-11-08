@@ -5,7 +5,8 @@ Railway Discord bot with dashboard-configurable channels/roles, voice and messag
 ## NxtCoin economy
 - Default prefix is `!`; a server admin can set a different 1–3 character prefix with `!prefix ?` (then use `?help`). Prefix settings and balances persist in SQLite.
 - Economy prefix commands have a shared 10-second cooldown per member and server. Only one cooldown notice is sent during that wait.
-- `!help` — economy command guide; `!earn` — list earning methods and cooldowns.
+- `!help` / `?help` — complete command guide, ways to earn, games, balances, transfers, and prefix setup.
+- `!earn` — list earning methods and their cooldowns.
 - `!balance` / `!bal` — check your wallet (or mention another member).
 - `!daily` — collect 100–250 NxtCoin every 24 hours.
 - `!work` — earn 20–100 NxtCoin every 30 minutes.
@@ -14,7 +15,7 @@ Railway Discord bot with dashboard-configurable channels/roles, voice and messag
 - `!pay @member amount` — transfer NxtCoin to another member.
 - `!coinflip amount heads|tails` and `!slots amount` — animated-in-chat coin flip and slot reels, with NxtCoin wagers.
 - `!rich` — server wallet leaderboard.
-- NxtCoin embeds render Unicode emoji as animated custom emojis from the server when available. Add animated server emojis and ensure the bot can use them. Google emoji GIFs aren't native Discord message emojis; animation is rendered with Discord's animated server emoji markup.
+- Google emoji animations are not supported as inline Discord message emojis. The command guide and economy embeds use animated custom server emojis when the server has them and the bot can access them. Otherwise, ordinary Unicode emoji remain as fallback. To show Google artwork, use a GIF image URL in an embed rather than inline emoji.
 
 ## Dashboard
 - Select server channels and roles from menus.
