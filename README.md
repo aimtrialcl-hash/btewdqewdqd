@@ -4,14 +4,16 @@ Railway Discord bot with dashboard-configurable channels/roles, voice and messag
 
 ## NxtCoin economy
 - Default prefix is `!`; a server admin can set a different 1–3 character prefix with `!prefix ?` (then use `?help`). Prefix settings and balances persist in SQLite.
-- `!help` — economy command guide.
+- `!help` — economy command guide; `!earn` — list earning methods and cooldowns.
 - `!balance` / `!bal` — check your wallet (or mention another member).
-- `!daily` — claim a random 100–250 NxtCoin bonus every 24 hours.
+- `!daily` — collect 100–250 NxtCoin every 24 hours.
 - `!work` — earn 20–100 NxtCoin every 30 minutes.
+- `!fish` — earn 15–90 NxtCoin every 15 minutes.
+- `!scavenge` — earn 40–160 NxtCoin every hour.
 - `!pay @member amount` — transfer NxtCoin to another member.
 - `!coinflip amount heads|tails` and `!slots amount` — animated-in-chat coin flip and slot reels, with NxtCoin wagers.
 - `!rich` — server wallet leaderboard.
-- The animation is made from timed message edits and emoji/embed effects; Discord embeds themselves are static.
+- The animation uses timed message edits and emoji/embed effects; Discord embeds themselves are static.
 
 ## Dashboard
 - Select server channels and roles from menus.
@@ -25,4 +27,4 @@ Railway Discord bot with dashboard-configurable channels/roles, voice and messag
 - `/grind`, `/vanity`, and `/botaccess` commands remain available.
 
 ## Deploy
-Enable Server Members Intent and Message Content Intent. Set Railway environment values from `.env.example`, register the `/auth/callback` OAuth redirect, and mount persistent storage at `/data`. Invite with `bot` and `applications.commands` and grant the necessary channel permissions, Manage Roles (above the configured rewards), and View Audit Log if bot-add monitoring is enabled.
+Enable Server Members Intent and Message Content Intent. Set Railway environment values from `.env.example`, register the `/auth/callback` OAuth redirect, and mount persistent storage at `/data`. Prefix commands need Message Content Intent enabled for the bot in the Discord Developer Portal.
