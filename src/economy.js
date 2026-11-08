@@ -7,8 +7,9 @@ const COOLDOWN = 10_000;
 const COIN = '🪙';
 const COLOR = 0x7C5CFC;
 const MAX_BET = 100_000;
+const GOOGLE_EMOJI_CDN = 'https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@main/png/128';
 const cooldowns = new Map();
-let emojiIndex = 0;
+const emojiIndex = 0;
 
 // CREATE TABLE leaves existing databases untouched, so migrate older account
 // tables before any commands query the newer earning cooldown columns.
@@ -38,7 +39,6 @@ const ensureAccount = db.prepare('INSERT OR IGNORE INTO economy_accounts(guild_i
 const getPrefix = db.prepare('SELECT prefix FROM economy_guild_settings WHERE guild_id=?');
 const savePrefix = db.prepare(`INSERT INTO economy_guild_settings(guild_id,prefix) VALUES(?,?)
   ON CONFLICT(guild_id) DO UPDATE SET prefix=excluded.prefix`);
-const emojiPattern = /\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?|\p{Emoji_Modifier}|\uFE0F)*/gu;
 const commandNames = new Set([
   'help','nxthelp','earn','earning','earnhelp','prefix','balance','bal','wallet','daily','work',
   'fish','scavenge','pay','give','coinflip','flip','slots','spin','rich','nxttop'
@@ -55,65 +55,48 @@ function timeLeft(ms) {
   const hours = Math.floor(mins / 60);
   return hours ? `${hours}h ${mins % 60}m` : `${mins}m`;
 }
+function googleEmoji(codepoint) {
+  return `${GOOGLE_EMOJI_CDN}/emoji_u${codepoint}.png`;
+}
+function googleIconFor(title) {
+  const titleText = String(title || '').toLowerCase();
+  if (/fish|fishing/.test(titleText)) return googleEmoji('1f41f');
+  if (/scavenge|treasure/.test(titleText)) return googleEmoji('1f4a0');
+  if (/daily|gift/.test(titleText)) return googleEmoji('1f381');
+  if (/work|shift/.test(titleText)) return googleEmoji('1f4bc');
+  if (/wallet|balance/.test(titleText)) return googleEmoji('1f45b');
+  if (/rich|leaderboard/.test(titleText)) return googleEmoji('1f3c6');
+  if (/slots|spin/.test(titleText)) return googleEmoji('1f3b0');
+  if (/flip|coin/.test(titleText)) return googleEmoji('1fa99');
+  if (/help|command/.test(titleText)) return googleEmoji('1f3ae');
+  if (/cooldown|wait/.test(titleText)) return googleEmoji('23f3');
+  if (/transfer|send/.test(titleText)) return googleEmoji('1f4b8');
+  return googleEmoji('1fa99');
+}
 function embed(title, description, user, color = COLOR) {
   const result = new EmbedBuilder().setColor(color).setTitle(title).setDescription(description)
-    .setTimestamp().setFooter({ text: 'NxtCoin • Community economy' });
+    .setAuthor({ name: 'NxtCoin • Community economy', iconURL: googleIconFor(title) })
+    .setTimestamp().setFooter({ text: 'Google Noto Emoji artwork • NxtCoin' });
   if (user) result.setThumbnail(user.displayAvatarURL({ size: 128 }));
   return result;
 }
-function animatedEmojis(guild) {
-  return guild?.emojis?.cache?.filter(item => item.animated && item.available !== false)
-    .map(item => item.toString()) || [];
-}
-function animatedEmoji(guild) {
-  const list = animatedEmojis(guild);
-  if (!list.length) return '';
-  return list[emojiIndex++ % list.length];
-}
-function animateEmbedPayload(payload, guild) {
-  if (!payload || !Array.isArray(payload.embeds)) return payload;
-  const available = animatedEmojis(guild);
-  if (!available.length) return payload;
-  const replace = text => typeof text === 'string'
-    ? text.replace(emojiPattern, () => animatedEmoji(guild))
-    : text;
-  return {
-    ...payload,
-    embeds: payload.embeds.map(item => {
-      const value = typeof item?.toJSON === 'function' ? item.toJSON() : item;
-      if (!value?.footer?.text?.includes('NxtCoin • Community economy')) return item;
-      return {
-        ...value,
-        title: replace(value.title),
-        description: replace(value.description),
-        footer: value.footer ? { ...value.footer, text: replace(value.footer.text) } : value.footer,
-        author: value.author ? { ...value.author, name: replace(value.author.name) } : value.author,
-        fields: value.fields?.map(field => ({ ...field, name: replace(field.name), value: replace(field.value) }))
-      };
-    })
-  };
-}
-
-function helpEmbed(guild, prefix) {
-  const icon = fallback => animatedEmoji(guild) || fallback;
+function helpEmbed(prefix) {
   const rows = [
-    `${icon('🎁')} **${prefix}daily** — 100–250 NxtCoin every 24h`,
-    `${icon('💼')} **${prefix}work** — 20–100 NxtCoin every 30m`,
-    `${icon('🎣')} **${prefix}fish** — 15–90 NxtCoin every 15m`,
-    `${icon('🔎')} **${prefix}scavenge** — 40–160 NxtCoin every hour`,
-    `${icon('👛')} **${prefix}balance** [@member] — check a wallet`,
-    `${icon('💸')} **${prefix}pay** @member amount — send coins`,
-    `${icon('🪙')} **${prefix}coinflip** amount heads|tails — flip for coins`,
-    `${icon('🎰')} **${prefix}slots** amount — play slots`,
-    `${icon('🏆')} **${prefix}rich** — top wallets`,
-    `${icon('⚙️')} **${prefix}prefix** <new> — change prefix (Manage Server)`
+    `🎁 **${prefix}daily** — 100–250 NxtCoin every 24h`,
+    `💼 **${prefix}work** — 20–100 NxtCoin every 30m`,
+    `🎣 **${prefix}fish** — 15–90 NxtCoin every 15m`,
+    `🔎 **${prefix}scavenge** — 40–160 NxtCoin every hour`,
+    `👛 **${prefix}balance** [@member] — check a wallet`,
+    `💸 **${prefix}pay** @member amount — send coins`,
+    `🪙 **${prefix}coinflip** amount heads|tails — flip for coins`,
+    `🎰 **${prefix}slots** amount — play slots`,
+    `🏆 **${prefix}rich** — top wallets`,
+    `✨ **${prefix}earn** — earning methods`,
+    `⚙️ **${prefix}prefix** <new> — change prefix (Manage Server)`
   ];
-  return new EmbedBuilder().setColor(COLOR)
-    .setTitle(`${animatedEmoji(guild) || '🪙'} NxtCoin • Command guide`)
-    .setDescription(`${rows.join('\n')}\n\n⏱️ Shared command cooldown: **10 seconds**.\nUse **${prefix}earn** for earning methods.`)
-    .setFooter({ text: `NxtCoin • Prefix: ${prefix}` }).setTimestamp();
+  return embed('🎮 NxtCoin • Command guide', `${rows.join('\n')}\n\n⏱️ Shared command cooldown: **10 seconds**.`, null)
+    .setFooter({ text: `NxtCoin • Prefix: ${prefix} • Google Noto Emoji artwork` });
 }
-
 function award(guildId, userId, now, field, cooldown, min, max) {
   const transaction = db.transaction(() => {
     const row = account(guildId, userId);
@@ -151,6 +134,17 @@ function validBet(raw, balance) {
   const amount = Number(raw);
   return Number.isSafeInteger(amount) && amount >= 1 && amount <= MAX_BET && amount <= balance ? amount : 0;
 }
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+async function sendAnimatedReward(message, title, action, result, frames) {
+  const reply = await message.reply({ embeds: [embed(title, `${frames[0].text}\n\nSearching for your reward…`, message.author)] });
+  for (const frame of frames.slice(1)) {
+    await pause(500);
+    await reply.edit({ embeds: [embed(title, `${frame.text}\n\nSearching for your reward…`, message.author)] }).catch(() => {});
+  }
+  await pause(350);
+  return reply.edit({ embeds: [embed('✨ Reward collected!', `${action}\n\n**+${coins(result.amount)}**\nWallet balance: **${coins(result.balance)}**`, message.author, 0x57F287)] });
+}
 
 async function handleMessage(message) {
   if (!message.guild || message.author.bot || message.system) return;
@@ -168,9 +162,7 @@ async function handleMessage(message) {
     if (!last.notified) {
       last.notified = true;
       const seconds = Math.max(1, Math.ceil((COOLDOWN - (now - last.at)) / 1000));
-      await message.reply({ embeds: [embed(`${animatedEmoji(message.guild) || '⏳'} Command cooldown`,
-        `Please wait **${seconds} seconds** before using another NxtCoin command.`, message.author, 0xF0B232)],
-        allowedMentions: { repliedUser: false } }).catch(() => {});
+      await message.reply({ embeds: [embed('⏳ Command cooldown', `Please wait **${seconds} seconds** before using another NxtCoin command.`, message.author, 0xF0B232)], allowedMentions: { repliedUser: false } }).catch(() => {});
     }
     return;
   }
@@ -179,22 +171,15 @@ async function handleMessage(message) {
   try {
     const guildId = message.guild.id;
     const user = message.author;
-    if (command === 'help' || command === 'nxthelp') {
-      return await message.reply({ embeds: [helpEmbed(message.guild, prefix)] });
-    }
+    if (command === 'help' || command === 'nxthelp') return await message.reply({ embeds: [helpEmbed(prefix)] });
     if (['earn','earning','earnhelp'].includes(command)) {
-      return await message.reply({ embeds: [embed('✨ Ways to earn NxtCoin',
-        `🎁 **${prefix}daily** — 100–250, every 24h\n💼 **${prefix}work** — 20–100, every 30m\n🎣 **${prefix}fish** — 15–90, every 15m\n🔎 **${prefix}scavenge** — 40–160, every hour\n🎰 Games can win or lose coins.`, user)] });
+      return await message.reply({ embeds: [embed('✨ Ways to earn NxtCoin', `🎁 **${prefix}daily** — 100–250, every 24h\n💼 **${prefix}work** — 20–100, every 30m\n🎣 **${prefix}fish** — 15–90, every 15m\n🔎 **${prefix}scavenge** — 40–160, every hour\n🎰 Games can win or lose coins.`, user)] });
     }
     if (command === 'prefix') {
-      if (!message.member?.permissions.has(PermissionFlagsBits.ManageGuild)) {
-        return await message.reply({ embeds: [embed('🔒 Admin only', 'Manage Server permission is required to change the prefix.', user)] });
-      }
+      if (!message.member?.permissions.has(PermissionFlagsBits.ManageGuild)) return await message.reply({ embeds: [embed('🔒 Admin only', 'Manage Server permission is required to change the prefix.', user)] });
       const next = args[0];
       if (!next) return await message.reply({ embeds: [embed('⌨️ Current prefix', `Prefix: \`${prefix}\`\nUsage: \`${prefix}prefix <new-prefix>\``, user)] });
-      if (next.length > 3 || /\s/.test(next) || /[\u0000-\u001f]/.test(next)) {
-        return await message.reply({ embeds: [embed('⚠️ Invalid prefix', 'Use 1–3 visible characters with no spaces.', user)] });
-      }
+      if (next.length > 3 || /\s/.test(next) || /[\u0000-\u001f]/.test(next)) return await message.reply({ embeds: [embed('⚠️ Invalid prefix', 'Use 1–3 visible characters with no spaces.', user)] });
       savePrefix.run(guildId, next);
       return await message.reply({ embeds: [embed('✅ Prefix updated', `Commands now start with \`${next}\`.`, user)] });
     }
@@ -202,23 +187,21 @@ async function handleMessage(message) {
       const target = message.mentions.users.first() || user;
       return await message.reply({ embeds: [embed(`👛 ${target.username}'s wallet`, `Balance: **${coins(account(guildId, target.id).balance)}**`, target)] });
     }
-    if (command === 'daily' || command === 'work' || command === 'fish' || command === 'scavenge') {
+    if (['daily','work','fish','scavenge'].includes(command)) {
       const options = {
-        daily: ['daily_at', 86_400_000, 100, 250, '🎁 Daily bonus'],
-        work: ['work_at', 1_800_000, 20, 100, '💼 Shift complete'],
-        fish: ['fish_at', 900_000, 15, 90, '🎣 Fishing haul'],
-        scavenge: ['scavenge_at', 3_600_000, 40, 160, '💎 Treasure found']
+        daily: ['daily_at', 86_400_000, 100, 250, '🎁 Daily bonus', [{ text: '🎁 Opening your daily NxtCoin drop…' }, { text: '✨ Your coins are sparkling…' }]],
+        work: ['work_at', 1_800_000, 20, 100, '💼 Shift complete', [{ text: '💼 Starting your shift…' }, { text: '⚙️ Finishing one last task…' }]],
+        fish: ['fish_at', 900_000, 15, 90, '🎣 Fishing haul', [{ text: '🎣 Casting your line…' }, { text: '🌊 Something is nibbling!' }, { text: '🐟 Reel it in!' }]],
+        scavenge: ['scavenge_at', 3_600_000, 40, 160, '💎 Treasure found', [{ text: '🔎 Searching the area…' }, { text: '🗺️ A clue appears!' }, { text: '💎 A hidden stash!' }]]
       }[command];
       const result = award(guildId, user.id, now, ...options.slice(0, 4));
       if (!result.ok) return await message.reply({ embeds: [embed('⏳ Reward cooldown', `Try again in **${timeLeft(result.wait)}**.`, user, 0xF0B232)] });
-      return await message.reply({ embeds: [embed(options[4], `You earned **${coins(result.amount)}**!\n\nBalance: **${coins(result.balance)}**`, user, 0x57F287)] });
+      return await sendAnimatedReward(message, options[4], `You completed **${command}** and earned NxtCoin!`, result, options[5]);
     }
     if (command === 'pay' || command === 'give') {
       const recipient = message.mentions.users.first();
       const amount = Number(args.find(arg => /^\d+$/.test(arg)));
-      if (!recipient || recipient.bot || recipient.id === user.id || !Number.isSafeInteger(amount) || amount < 1 || amount > MAX_BET) {
-        return await message.reply({ embeds: [embed('💸 Send NxtCoin', `Usage: \`${prefix}pay @member amount\``, user)] });
-      }
+      if (!recipient || recipient.bot || recipient.id === user.id || !Number.isSafeInteger(amount) || amount < 1 || amount > MAX_BET) return await message.reply({ embeds: [embed('💸 Send NxtCoin', `Usage: \`${prefix}pay @member amount\``, user)] });
       const result = transfer(guildId, user.id, recipient.id, amount);
       if (!result.ok) return await message.reply({ embeds: [embed('🪙 Not enough coins', `Wallet balance: **${coins(result.balance)}**`, user)] });
       return await message.reply({ embeds: [embed('💸 Transfer complete', `Sent **${coins(amount)}** to ${recipient}.\nBalance: **${coins(result.balance)}**`, user)] });
@@ -227,10 +210,7 @@ async function handleMessage(message) {
       const wallet = account(guildId, user.id);
       const bet = validBet(args[0], wallet.balance);
       const flip = command === 'coinflip' || command === 'flip';
-      if (!bet || (flip && !['heads','tails'].includes((args[1] || '').toLowerCase()))) {
-        return await message.reply({ embeds: [embed(flip ? '🪙 Coin flip' : '🎰 Slots',
-          flip ? `Usage: \`${prefix}coinflip amount heads|tails\`` : `Usage: \`${prefix}slots amount\``, user)] });
-      }
+      if (!bet || (flip && !['heads','tails'].includes((args[1] || '').toLowerCase()))) return await message.reply({ embeds: [embed(flip ? '🪙 Coin flip' : '🎰 Slots', flip ? `Usage: \`${prefix}coinflip amount heads|tails\`` : `Usage: \`${prefix}slots amount\``, user)] });
       let outcome;
       let payout;
       if (flip) {
@@ -240,8 +220,7 @@ async function handleMessage(message) {
         const symbols = ['🍒','🍋','🔔','💎','⭐'];
         const roll = () => symbols[Math.floor(Math.random() * symbols.length)];
         outcome = [roll(), roll(), roll()];
-        payout = outcome.every(symbol => symbol === outcome[0]) ? bet * 5 :
-          (outcome[0] === outcome[1] || outcome[1] === outcome[2] || outcome[0] === outcome[2]) ? Math.floor(bet * 1.5) : 0;
+        payout = outcome.every(symbol => symbol === outcome[0]) ? bet * 5 : (outcome[0] === outcome[1] || outcome[1] === outcome[2] || outcome[0] === outcome[2]) ? Math.floor(bet * 1.5) : 0;
       }
       const result = betCoins(guildId, user.id, bet, payout);
       if (!result.ok) return await message.reply({ embeds: [embed('🪙 Bet not placed', `Balance: **${coins(result.balance)}**`, user)] });
@@ -268,18 +247,12 @@ Client.prototype.login = function loginWithEconomy(token) {
   return originalLogin.call(this, token);
 };
 
-// Message is explicitly imported above (the missing import caused the reported
-// startup ReferenceError). These wrappers keep animated custom server emojis.
+// Google Noto artwork is static PNG, shown as the embed's author icon. Message
+// edit frames in reward commands create a simple animation-like sequence.
 if (Message?.prototype?.reply) {
   const originalReply = Message.prototype.reply;
-  Message.prototype.reply = function replyWithEconomyEmojis(...args) {
-    return originalReply.call(this, animateEmbedPayload(args[0], this.guild), ...args.slice(1));
-  };
-}
-if (Message?.prototype?.edit) {
-  const originalEdit = Message.prototype.edit;
-  Message.prototype.edit = function editWithEconomyEmojis(...args) {
-    return originalEdit.call(this, animateEmbedPayload(args[0], this.guild), ...args.slice(1));
+  Message.prototype.reply = function replyWithGoogleNotoEmoji(...args) {
+    return originalReply.call(this, ...args);
   };
 }
 
