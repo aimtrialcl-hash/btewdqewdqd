@@ -2,11 +2,11 @@
   "name": "discord-community-bot",
   "version": "1.0.0",
   "private": true,
-  "description": "Discord community bot with voice leaderboards and an authenticated admin dashboard.",
+  "description": "Discord community bot with voice and message leaderboards and an authenticated admin dashboard.",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "start": "node --require ./src/rank-emojis.js src/index.js",
+    "dev": "node --watch --require ./src/rank-emojis.js src/index.js"
   },
   "engines": { "node": ">=22" },
   "dependencies": {
