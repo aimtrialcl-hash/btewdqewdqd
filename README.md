@@ -2,25 +2,24 @@
 
 Railway Discord bot with Discord OAuth dashboard, selectable channel/role controls, voice and message leaderboards, and persistent auto-updating leaderboard embeds.
 
-## Dashboard and leaderboard embeds
-- Sign in with Discord. Only servers shared with the bot where the signed-in user owns the server or has Manage Server/Administrator permission are listed.
-- Choose channels and roles from dropdowns; no need to copy IDs.
-- Choose a leaderboard posting channel and the bot creates four embeds: weekly/monthly voice time and message counts. The same messages are edited every 60 seconds.
-- The dashboard leaderboard also refreshes once per minute while the tab is visible.
-- The embed editor includes live preview and a server custom-emoji picker.
+## Dashboard
+- Sign in with Discord; only shared servers where your account has Manage Server/Administrator permission are listed.
+- Choose channels and roles from dropdowns.
+- The embed editor can send new embeds or edit an existing message sent by this bot. For edits, select the channel, choose **Edit existing bot embed**, and provide the message ID (enable Developer Mode in Discord and use **Copy Message ID**). For safety, messages authored by other users cannot be edited.
+- The editor has a live preview and a custom server emoji picker.
+- The dashboard leaderboard refreshes once per minute while the tab is visible.
 
-## Tracking and rewards
-- Voice time is calculated from voice state events. It only accumulates while the bot is online and tracking; previously connected users are resumed at startup.
-- Message leaderboard counts non-bot guild messages from deployment onward. Enable the **Message Content Intent** in the Discord Developer Portal (the bot does not read message text, only count events).
-- At weekly/monthly reset, the #1 voice-time member gets the configured reward role; the prior bot-awarded role is removed on the next reset.
-- Bot needs Manage Roles, with its top role above roles it manages. It also needs View Channel, Send Messages, Embed Links and Read Message History for leaderboard posting.
-- `/grind join` and `/grind leave` manage the opt-in role. `/vanity set`, `/vanity claim`, `/vanity remove` manage explicit vanity reward claims.
-- `/botaccess` offers best-effort bot-add monitoring; Discord does not permit bots to block app installations before they happen.
+## Leaderboards and bot commands
+- Choose a posting channel to create weekly/monthly voice and message leaderboard embeds; the bot edits the same posts every 60 seconds.
+- Voice time is calculated from voice-state events. Message counts start after deployment and require the Message Content Intent; message contents are not read.
+- The weekly/monthly voice #1 receives the configured winner role when each period resets.
+- `/grind join` and `/grind leave` manage the opt-in role. `/vanity set`, `/vanity claim`, and `/vanity remove` are self-claimed role commands and do not verify server vanity/tag use.
+- `/botaccess` provides best-effort bot-add monitoring; Discord does not let bots block app installations in advance.
 
-## Railway and Discord OAuth setup
-1. In Discord Developer Portal, enable **Server Members Intent**, **Server Messages Intent/Message Content Intent** as available, and set OAuth2 redirect URI to `https://YOUR-RAILWAY-DOMAIN/auth/callback`.
-2. Set Railway variables: `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `BOT_OWNER_ID`, `SESSION_SECRET`, `DASHBOARD_URL`, `DATA_DIR=/data`, and `NODE_ENV=production`. Railway supplies `PORT`.
-3. Set `DASHBOARD_URL` to the exact public Railway domain (no trailing slash). Add a Railway Volume mounted at `/data` so SQLite data persists.
-4. Redeploy, open the dashboard, sign in with Discord, select the server and configure channel/role dropdowns.
+## Deploy
+1. Enable Server Members Intent and Message Content Intent in the Discord Developer Portal.
+2. Add the exact OAuth redirect URI `https://YOUR-RAILWAY-DOMAIN/auth/callback`.
+3. Set Railway variables from `.env.example`, including `DATA_DIR=/data`, `DASHBOARD_URL`, and `NODE_ENV=production`; mount a persistent volume at `/data`.
+4. Invite the bot with `bot` and `applications.commands` scopes. Grant View Channels, Send Messages, Embed Links, Read Message History, Manage Roles, View Audit Log, and other permissions needed for enabled features.
 
-Message and voice history is not retroactive. Railway availability depends on service plan/status. Never share bot tokens or OAuth secrets; rotate any secret already exposed.
+Never share bot tokens or OAuth secrets. Message and voice history are not retroactive. Railway availability depends on plan and service status.
