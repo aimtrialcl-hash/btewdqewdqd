@@ -4,7 +4,7 @@ const crypto = require('node:crypto');
 const express = require('express');
 const {
   Client, GatewayIntentBits, EmbedBuilder, PermissionFlagsBits,
-  SlashCommandBuilder, ChannelType
+  SlashCommandBuilder, ChannelType, AuditLogEvent
 } = require('discord.js');
 const store = require('./database');
 
@@ -32,13 +32,20 @@ function periodRange(period, now = new Date()) {
   const start = new Date(now);
   if (period === 'weekly') {
     start.setUTCHours(0, 0, 0, 0);
-    const daysSinceMonday = (start.getUTCDay() + 6) % 7;
-    start.setUTCDate(start.getUTCDate() - daysSinceMonday);
+    start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7));
   } else {
     start.setUTCDate(1);
     start.setUTCHours(0, 0, 0, 0);
   }
   return { start: start.getTime(), end };
+}
+function previousPeriodRange(period, now = new Date()) {
+  const { start: currentStart } = periodRange(period, now);
+  const end = currentStart;
+  const startDate = new Date(end);
+  if (period === 'weekly') startDate.setUTCDate(startDate.getUTCDate() - 7);
+  else startDate.setUTCMonth(startDate.getUTCMonth() - 1);
+  return { start: startDate.getTime(), end };
 }
 function leaderboard(guildId, period) {
   const { start, end } = periodRange(period);
@@ -47,11 +54,28 @@ function leaderboard(guildId, period) {
     return { userId: row.user_id, name: member?.displayName || `Member ${row.user_id.slice(-4)}`, milliseconds: row.milliseconds };
   });
 }
+function rewardRoleId(settings, period) {
+  return period === 'weekly' ? settings.weekly_reward_role_id : settings.monthly_reward_role_id;
+}
+function getRewardInfo(guild, period) {
+  const roleId = rewardRoleId(store.settings(guild.id), period);
+  const role = roleId && guild.roles.cache.get(roleId);
+  return role ? `Top voice member receives ${role}.` : 'No winner role configured yet.';
+}
+function validOptionalString(value, maxLength) {
+  return value == null || (typeof value === 'string' && value.length <= maxLength);
+}
+function validImageUrl(value) {
+  if (!value) return true;
+  try { return ['http:', 'https:'].includes(new URL(value).protocol); } catch { return false; }
+}
+
 app.get('/api/leaderboard', (req, res) => {
   const { guildId, period = 'weekly' } = req.query;
-  if (typeof guildId !== 'string' || !client.guilds.cache.has(guildId)) return res.status(404).json({ error: 'Unknown server' });
+  const guild = typeof guildId === 'string' ? client.guilds.cache.get(guildId) : null;
+  if (!guild) return res.status(404).json({ error: 'Unknown server' });
   if (!['weekly', 'monthly'].includes(period)) return res.status(400).json({ error: 'period must be weekly or monthly' });
-  res.json({ period, entries: leaderboard(guildId, period) });
+  res.json({ period, reward: getRewardInfo(guild, period), entries: leaderboard(guild.id, period) });
 });
 app.get('/api/guilds', requireDashboardToken, (_req, res) => {
   res.json(client.guilds.cache.map(guild => ({ id: guild.id, name: guild.name })));
@@ -60,29 +84,41 @@ app.get('/api/settings/:guildId', requireDashboardToken, (req, res) => {
   if (!client.guilds.cache.has(req.params.guildId)) return res.status(404).json({ error: 'Unknown server' });
   res.json(store.settings(req.params.guildId));
 });
-app.put('/api/settings/:guildId', requireDashboardToken, async (req, res) => {
+app.put('/api/settings/:guildId', requireDashboardToken, (req, res) => {
   const guild = client.guilds.cache.get(req.params.guildId);
   if (!guild) return res.status(404).json({ error: 'Unknown server' });
-  const allowed = ['announcement_channel_id', 'grind_role_id', 'vanity_role_id', 'vanity_code'];
+  const allowed = ['announcement_channel_id', 'grind_role_id', 'vanity_role_id', 'vanity_code', 'weekly_reward_role_id', 'monthly_reward_role_id'];
   const changes = {};
   for (const key of allowed) {
     if (Object.hasOwn(req.body, key)) {
       const val = req.body[key];
-      if (val !== null && (typeof val !== 'string' || val.length > 100)) return res.status(400).json({ error: `Invalid ${key}` });
+      if (!validOptionalString(val, 100)) return res.status(400).json({ error: `Invalid ${key}` });
       changes[key] = val || null;
     }
   }
   res.json(store.saveGuildSettings(guild.id, changes));
 });
 app.post('/api/embed', requireDashboardToken, async (req, res) => {
-  const { guildId, channelId, title, description, color = '#5865F2' } = req.body || {};
+  const { guildId, channelId, title, description, color = '#5865F2', author, footer, imageUrl, thumbnailUrl, timestamp = false } = req.body || {};
   const guild = client.guilds.cache.get(guildId);
-  if (!guild || typeof channelId !== 'string' || typeof title !== 'string' || typeof description !== 'string') return res.status(400).json({ error: 'Provide a valid server, channel, title, and description.' });
-  if (title.length > 256 || description.length > 4000 || !/^#[0-9a-f]{6}$/i.test(color)) return res.status(400).json({ error: 'Title, description, or color is invalid.' });
+  if (!guild || typeof channelId !== 'string' || typeof title !== 'string' || typeof description !== 'string') {
+    return res.status(400).json({ error: 'Provide a valid server, channel, title, and description.' });
+  }
+  if (title.length > 256 || description.length > 4000 || !/^#[0-9a-f]{6}$/i.test(color)
+      || !validOptionalString(author, 256) || !validOptionalString(footer, 2048)
+      || !validImageUrl(imageUrl) || !validImageUrl(thumbnailUrl)) {
+    return res.status(400).json({ error: 'Embed text, color, or image URL is invalid.' });
+  }
   try {
     const channel = await guild.channels.fetch(channelId);
     if (!channel?.isTextBased() || !channel.send) return res.status(400).json({ error: 'That is not a text channel.' });
-    await channel.send({ embeds: [new EmbedBuilder().setColor(color).setTitle(title).setDescription(description).setTimestamp()] });
+    const embed = new EmbedBuilder().setColor(color).setTitle(title).setDescription(description);
+    if (author) embed.setAuthor({ name: author });
+    if (footer) embed.setFooter({ text: footer });
+    if (imageUrl) embed.setImage(imageUrl);
+    if (thumbnailUrl) embed.setThumbnail(thumbnailUrl);
+    if (timestamp) embed.setTimestamp();
+    await channel.send({ embeds: [embed] });
     res.json({ ok: true });
   } catch (error) {
     console.error('Dashboard embed failed:', error);
@@ -95,6 +131,45 @@ function utcDuration(ms) {
   const minutes = Math.floor((ms % 3600000) / 60000);
   return `${hours}h ${minutes}m`;
 }
+async function processLeaderboardResets() {
+  for (const guild of client.guilds.cache.values()) {
+    for (const period of ['weekly', 'monthly']) {
+      const { start, end } = previousPeriodRange(period);
+      if (store.getAward(guild.id, period, start)) continue;
+      const roleId = rewardRoleId(store.settings(guild.id), period);
+      if (!roleId) continue;
+      const role = await guild.roles.fetch(roleId).catch(() => null);
+      if (!role) {
+        console.warn(`Missing ${period} leaderboard reward role in guild ${guild.id}`);
+        continue;
+      }
+      const previous = store.latestAward(guild.id, period, start);
+      if (previous?.user_id && previous.role_id === role.id) {
+        const priorMember = await guild.members.fetch(previous.user_id).catch(() => null);
+        if (priorMember?.roles.cache.has(role.id)) await priorMember.roles.remove(role, `${period} leaderboard reward reset`).catch(console.error);
+      }
+      const winner = store.getLeaderboard(guild.id, start, end, end)[0];
+      let winnerMember = null;
+      if (winner) {
+        winnerMember = await guild.members.fetch(winner.user_id).catch(() => null);
+        if (winnerMember) await winnerMember.roles.add(role, `${period} leaderboard winner`).catch(error => { console.error('Could not assign leaderboard reward:', error); winnerMember = null; });
+      }
+      // Record only after role operations so a transient Discord API failure can retry next check.
+      if (winner && !winnerMember) continue;
+      store.recordAward(guild.id, period, start, winnerMember?.id || null, role.id);
+      const channelId = store.settings(guild.id).announcement_channel_id;
+      const channel = channelId && await guild.channels.fetch(channelId).catch(() => null);
+      if (channel?.isTextBased() && channel.send) {
+        const description = winnerMember
+          ? `${winnerMember} won ${role} with **${utcDuration(winner.milliseconds)}** of voice time. The ${period} leaderboard has reset.`
+          : `No voice activity was recorded for the previous ${period} leaderboard. The new ${period} period has started.`;
+        await channel.send({ embeds: [new EmbedBuilder().setColor(winnerMember ? 0x57F287 : 0x5865F2)
+          .setTitle(`${period === 'weekly' ? 'Weekly' : 'Monthly'} leaderboard reset`)
+          .setDescription(description).setTimestamp()] }).catch(console.error);
+      }
+    }
+  }
+}
 function isGuildManager(interaction) {
   return interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
 }
@@ -106,9 +181,11 @@ function canConfigure(interaction) {
 }
 const commands = [
   new SlashCommandBuilder().setName('configure').setDescription('Configure roles and announcement channel')
-    .addChannelOption(o => o.setName('announcement_channel').setDescription('Channel for vanity notices').addChannelTypes(ChannelType.GuildText))
+    .addChannelOption(o => o.setName('announcement_channel').setDescription('Channel for notices').addChannelTypes(ChannelType.GuildText))
     .addRoleOption(o => o.setName('grind_role').setDescription('Role members can opt into'))
-    .addRoleOption(o => o.setName('vanity_role').setDescription('Reward role for a vanity claim')),
+    .addRoleOption(o => o.setName('vanity_role').setDescription('Reward role for a vanity claim'))
+    .addRoleOption(o => o.setName('weekly_reward_role').setDescription('Role awarded to the weekly voice leaderboard winner'))
+    .addRoleOption(o => o.setName('monthly_reward_role').setDescription('Role awarded to the monthly voice leaderboard winner')),
   new SlashCommandBuilder().setName('embed').setDescription('Send an embed to a channel')
     .addChannelOption(o => o.setName('channel').setDescription('Destination').setRequired(true).addChannelTypes(ChannelType.GuildText))
     .addStringOption(o => o.setName('title').setDescription('Embed title').setRequired(true).setMaxLength(256))
@@ -139,20 +216,27 @@ const commands = [
 
 client.once('ready', async () => {
   console.log(`Logged in as ${client.user.tag}`);
+  // Close sessions left open during a previous process lifetime, then resume current voice participants.
+  store.closeOpenVoiceSessions();
+  for (const guild of client.guilds.cache.values()) {
+    for (const state of guild.voiceStates.cache.values()) {
+      if (state.channelId && state.member && !state.member.user.bot) store.recordVoiceJoin(guild.id, state.id, state.channelId);
+    }
+  }
   try {
     await client.application.commands.set(commands.map(command => command.toJSON()));
     console.log('Registered global slash commands.');
   } catch (error) { console.error('Could not register slash commands:', error); }
+  await processLeaderboardResets().catch(error => console.error('Leaderboard reset processing failed:', error));
+  setInterval(() => processLeaderboardResets().catch(error => console.error('Leaderboard reset processing failed:', error)), 60_000);
 });
 
 client.on('voiceStateUpdate', (oldState, newState) => {
   const guildId = newState.guild.id;
   const userId = newState.id;
-  if (!oldState.channelId && newState.channelId && !newState.member?.user.bot) {
-    store.recordVoiceJoin(guildId, userId, newState.channelId);
-  } else if (oldState.channelId && !newState.channelId) {
-    store.recordVoiceLeave(guildId, userId);
-  } else if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
+  if (!oldState.channelId && newState.channelId && !newState.member?.user.bot) store.recordVoiceJoin(guildId, userId, newState.channelId);
+  else if (oldState.channelId && !newState.channelId) store.recordVoiceLeave(guildId, userId);
+  else if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
     store.recordVoiceLeave(guildId, userId);
     if (!newState.member?.user.bot) store.recordVoiceJoin(guildId, userId, newState.channelId);
   }
@@ -161,13 +245,11 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 client.on('guildMemberAdd', async member => {
   if (!member.user.bot || !store.isLocked(member.guild.id)) return;
   try {
-    const logs = await member.guild.fetchAuditLogs({ type: 28, limit: 6 }); // AuditLogEvent.BotAdd
+    const logs = await member.guild.fetchAuditLogs({ type: AuditLogEvent.BotAdd, limit: 6 });
     const entry = logs.entries.find(item => item.target?.id === member.id && Date.now() - item.createdTimestamp < 60_000);
     const inviterId = entry?.executor?.id;
     const allowed = inviterId === ownerId || inviterId === member.guild.ownerId || (inviterId && store.isWhitelisted(member.guild.id, inviterId));
-    if (!allowed && member.guild.members.me?.permissions.has(PermissionFlagsBits.KickMembers)) {
-      await member.kick('Bot-add monitoring: inviter is not authorized');
-    }
+    if (!allowed && member.guild.members.me?.permissions.has(PermissionFlagsBits.KickMembers)) await member.kick('Bot-add monitoring: inviter is not authorized');
     const destination = store.settings(member.guild.id).announcement_channel_id;
     const channel = destination && await member.guild.channels.fetch(destination).catch(() => null);
     if (channel?.isTextBased() && channel.send) {
@@ -185,15 +267,18 @@ client.on('interactionCreate', async interaction => {
     if (interaction.commandName === 'configure') {
       if (!canConfigure(interaction)) return interaction.reply({ content: 'You need Manage Server permission to configure this bot.', ephemeral: true });
       const changes = {};
-      const channel = interaction.options.getChannel('announcement_channel');
-      const grindRole = interaction.options.getRole('grind_role');
-      const vanityRole = interaction.options.getRole('vanity_role');
-      if (channel) changes.announcement_channel_id = channel.id;
-      if (grindRole) changes.grind_role_id = grindRole.id;
-      if (vanityRole) changes.vanity_role_id = vanityRole.id;
+      const options = [
+        ['announcement_channel', 'announcement_channel_id'], ['grind_role', 'grind_role_id'],
+        ['vanity_role', 'vanity_role_id'], ['weekly_reward_role', 'weekly_reward_role_id'],
+        ['monthly_reward_role', 'monthly_reward_role_id']
+      ];
+      for (const [option, key] of options) {
+        const value = option === 'announcement_channel' ? interaction.options.getChannel(option) : interaction.options.getRole(option);
+        if (value) changes[key] = value.id;
+      }
       if (!Object.keys(changes).length) return interaction.reply({ content: 'Choose at least one setting to update.', ephemeral: true });
       store.saveGuildSettings(interaction.guildId, changes);
-      return interaction.reply({ content: 'Guild settings updated.', ephemeral: true });
+      return interaction.reply({ content: 'Guild settings updated. Weekly/monthly leaderboard reward roles go to the #1 voice-time member at reset.', ephemeral: true });
     }
     if (interaction.commandName === 'embed') {
       if (!canConfigure(interaction)) return interaction.reply({ content: 'You need Manage Server permission to send configured embeds.', ephemeral: true });
@@ -208,8 +293,10 @@ client.on('interactionCreate', async interaction => {
       const period = interaction.options.getString('period');
       const entries = leaderboard(interaction.guildId, period);
       const description = entries.length ? entries.map((entry, i) => `**${i + 1}.** ${entry.name} — ${utcDuration(entry.milliseconds)}`).join('\n') : 'No voice activity recorded for this period yet.';
+      const { start } = periodRange(period);
       return interaction.reply({ embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(`${period === 'weekly' ? 'Weekly' : 'Monthly'} Voice Leaderboard`)
-        .setDescription(description).setFooter({ text: 'UTC period • time tracked while the bot is online' }).setTimestamp()], ephemeral: false });
+        .setDescription(`${description}\n\n**Reward:** ${getRewardInfo(interaction.guild, period)}\n**Resets:** <t:${Math.floor(start / 1000)}:R>`)
+        .setFooter({ text: 'UTC period • voice time tracked while the bot is online' }).setTimestamp()], ephemeral: false });
     }
     if (interaction.commandName === 'grind') {
       const roleId = store.settings(interaction.guildId).grind_role_id;
@@ -237,8 +324,7 @@ client.on('interactionCreate', async interaction => {
         if (!config.vanity_code || given.toLowerCase() !== config.vanity_code.toLowerCase()) return interaction.reply({ content: 'That does not match the configured vanity code.', ephemeral: true });
         await interaction.member.roles.add(role);
         const channel = config.announcement_channel_id && await interaction.guild.channels.fetch(config.announcement_channel_id).catch(() => null);
-        if (channel?.isTextBased() && channel.send) await channel.send({ embeds: [new EmbedBuilder().setColor(0x57F287).setTitle('Vanity supporter')
-          .setDescription(`${interaction.user} claimed the vanity reward!`).setTimestamp()] });
+        if (channel?.isTextBased() && channel.send) await channel.send({ embeds: [new EmbedBuilder().setColor(0x57F287).setTitle('Vanity supporter').setDescription(`${interaction.user} claimed the vanity reward!`).setTimestamp()] });
         return interaction.reply({ content: `Vanity reward ${role} added. Use /vanity remove to remove it.`, ephemeral: true });
       }
       await interaction.member.roles.remove(role);
@@ -250,7 +336,7 @@ client.on('interactionCreate', async interaction => {
       if (subcommand === 'lock') {
         const enabled = interaction.options.getBoolean('enabled');
         store.setLocked(interaction.guildId, enabled);
-        return interaction.reply({ content: `Bot-add monitoring ${enabled ? 'enabled' : 'disabled'}. Note: Discord does not let bots prevent app installs; this monitors joins and may remove unauthorized bots after they are added.`, ephemeral: true });
+        return interaction.reply({ content: `Bot-add monitoring ${enabled ? 'enabled' : 'disabled'}. Discord does not let bots prevent app installs; this monitors joins and may remove unauthorized bots after they are added.`, ephemeral: true });
       }
       const user = interaction.options.getUser('user');
       const add = interaction.options.getString('action') === 'add';

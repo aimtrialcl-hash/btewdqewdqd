@@ -6,40 +6,55 @@
   <title>Community Bot Dashboard</title>
   <style>
     :root{color-scheme:dark;--bg:#111318;--card:#1b1e27;--line:#303442;--text:#f4f5f8;--muted:#a9afbd;--accent:#7388ff}
-    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,sans-serif}main{max-width:920px;margin:40px auto;padding:0 20px}h1{margin-bottom:4px}p,.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-top:18px}label{display:block;margin:12px 0 5px;color:var(--muted)}input,select,textarea,button{width:100%;padding:11px;border-radius:8px;border:1px solid var(--line);background:#12141a;color:var(--text);font:inherit}textarea{min-height:100px;resize:vertical}button{background:var(--accent);border:0;font-weight:700;cursor:pointer;margin-top:14px}button:hover{filter:brightness(1.1)}.inline{display:flex;gap:8px;align-items:end}.inline>*{flex:1}#status{min-height:24px;color:#8ee0a4}ol{padding-left:24px}li{padding:5px 0}.warning{border-left:3px solid #edb84c;padding-left:12px}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,sans-serif}main{max-width:1120px;margin:36px auto;padding:0 20px}h1{margin-bottom:4px}p,.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-top:18px}label{display:block;margin:11px 0 5px;color:var(--muted);font-size:14px}input,select,textarea,button{width:100%;padding:11px;border-radius:8px;border:1px solid var(--line);background:#12141a;color:var(--text);font:inherit}textarea{min-height:110px;resize:vertical}button{background:var(--accent);border:0;font-weight:700;cursor:pointer;margin-top:14px}button:hover{filter:brightness(1.1)}.inline{display:flex;gap:8px;align-items:end}.inline>*{flex:1}.status{min-height:24px;color:#8ee0a4}.warning{border-left:3px solid #edb84c;padding-left:12px}.editor{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(280px,.9fr);gap:22px;align-items:start}.discord{background:#313338;border-radius:10px;padding:18px;min-height:230px}.embed{background:#2b2d31;border-left:4px solid #5865f2;border-radius:4px;padding:14px;max-width:520px;overflow:hidden}.embed-author{font-size:13px;font-weight:600;margin-bottom:8px}.embed-title{font-size:16px;font-weight:700;margin-bottom:8px}.embed-description{font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}.embed-footer{color:#b5bac1;font-size:12px;margin-top:12px}.embed img{display:block;max-width:100%;max-height:220px;object-fit:contain;object-position:left;margin-top:12px;border-radius:4px}.preview-label{margin:0 0 10px;color:var(--muted);font-size:13px}.reward{padding:10px 12px;border-radius:8px;background:#232633;color:#cbd0ff;font-size:14px;margin:10px 0}.leader-row{padding:5px 0;border-bottom:1px solid var(--line)}@media(max-width:720px){.editor{grid-template-columns:1fr}main{margin-top:22px}}
   </style>
 </head>
 <body><main>
-  <h1>Community Bot</h1><p>Voice leaderboards, role settings, and embed announcements.</p>
+  <h1>Community Bot</h1><p>Voice leaderboards, reward roles, server settings, and embed announcements.</p>
   <section class="card">
     <h2>Connect dashboard</h2>
-    <p class="muted">Enter the dashboard token configured in Railway. It is kept in this browser tab and is not saved by the site.</p>
+    <p class="muted">Enter the dashboard token configured in Railway. It stays in this browser tab and is not saved by the site.</p>
     <label for="token">Dashboard token</label><input id="token" type="password" autocomplete="off" placeholder="DASHBOARD_TOKEN">
-    <button id="connect">Connect</button><div id="status" role="status"></div>
+    <button id="connect">Connect</button><div id="status" class="status" role="status"></div>
   </section>
   <div id="dashboard" hidden>
     <div class="grid">
-      <section class="card"><h2>Leaderboard</h2>
+      <section class="card"><h2>Voice leaderboard</h2>
         <label for="guild">Server</label><select id="guild"></select>
         <div class="inline"><div><label for="period">Period</label><select id="period"><option value="weekly">This week</option><option value="monthly">This month</option></select></div><div><button id="refresh">Refresh</button></div></div>
-        <ol id="leaders"></ol><p class="muted">Tracked voice time uses UTC periods and starts when the bot is online.</p>
+        <div id="rewardInfo" class="reward">Configure a reward role below. The #1 voice-time member receives it when this period resets.</div>
+        <ol id="leaders"></ol><p class="muted">UTC periods. Voice activity is tracked while the bot is online.</p>
       </section>
       <section class="card"><h2>Server settings</h2>
         <label for="announcement">Announcement channel ID</label><input id="announcement" placeholder="Discord channel ID">
-        <label for="grind">Grind role ID</label><input id="grind" placeholder="Discord role ID">
+        <label for="grind">Opt-in grind role ID</label><input id="grind" placeholder="Discord role ID">
+        <label for="weeklyReward">Weekly #1 reward role ID</label><input id="weeklyReward" placeholder="Role awarded at weekly reset">
+        <label for="monthlyReward">Monthly #1 reward role ID</label><input id="monthlyReward" placeholder="Role awarded at monthly reset">
         <label for="vanityRole">Vanity reward role ID</label><input id="vanityRole" placeholder="Discord role ID">
-        <label for="vanityCode">Vanity claim code</label><input id="vanityCode" placeholder="The code members enter in /vanity claim">
+        <label for="vanityCode">Vanity claim code</label><input id="vanityCode" placeholder="Code members enter in /vanity claim">
         <button id="save">Save settings</button>
       </section>
     </div>
-    <section class="card"><h2>Send embed</h2>
-      <label for="embedChannel">Channel ID</label><input id="embedChannel" placeholder="Discord channel ID">
-      <label for="title">Title</label><input id="title" maxlength="256">
-      <label for="description">Description</label><textarea id="description" maxlength="4000"></textarea>
-      <label for="color">Hex color</label><input id="color" value="#5865F2" maxlength="7">
-      <button id="send">Send embed</button>
+    <section class="card"><h2>Embed editor</h2>
+      <div class="editor"><div>
+        <label for="embedChannel">Send to channel ID</label><input id="embedChannel" placeholder="Discord channel ID">
+        <label for="title">Title</label><input id="title" maxlength="256" placeholder="Announcement title">
+        <label for="description">Description</label><textarea id="description" maxlength="4000" placeholder="Write your message. New lines are supported."></textarea>
+        <label for="author">Author (optional)</label><input id="author" maxlength="256" placeholder="Server name or author label">
+        <label for="footer">Footer (optional)</label><input id="footer" maxlength="2048" placeholder="Additional note">
+        <label for="color">Accent color</label><input id="color" type="color" value="#5865F2" style="height:44px;padding:4px">
+        <label for="thumbnailUrl">Thumbnail URL (optional)</label><input id="thumbnailUrl" type="url" placeholder="https://…">
+        <label for="imageUrl">Large image URL (optional)</label><input id="imageUrl" type="url" placeholder="https://…">
+        <label><input id="timestamp" type="checkbox" style="width:auto;margin-right:8px">Add current timestamp</label>
+        <button id="send">Send embed</button>
+      </div><div><p class="preview-label">LIVE PREVIEW</p><div class="discord"><div class="embed" id="embedPreview">
+        <div id="previewAuthor" class="embed-author" hidden></div><div id="previewTitle" class="embed-title">Embed title</div>
+        <div id="previewDescription" class="embed-description">Your embed description will appear here.</div>
+        <img id="previewThumbnail" alt="Embed thumbnail" hidden><img id="previewImage" alt="Embed image" hidden>
+        <div id="previewFooter" class="embed-footer" hidden></div>
+      </div></div></div></div>
     </section>
-    <section class="card warning"><strong>Bot-add controls</strong><p>Use <code>/botaccess</code> in Discord to enable best-effort monitoring and manage the inviter whitelist. Discord does not allow bots to prevent an app install before it happens.</p></section>
+    <section class="card warning"><strong>Bot-add controls</strong><p>Use <code>/botaccess</code> in Discord to enable best-effort monitoring and manage the inviter whitelist. Discord does not allow bots to prevent an app installation before it happens.</p></section>
   </div>
 </main>
 <script>
@@ -58,28 +73,50 @@
     const s = await api(`/api/settings/${encodeURIComponent(guildId)}`);
     $('announcement').value = s.announcement_channel_id || '';
     $('grind').value = s.grind_role_id || '';
+    $('weeklyReward').value = s.weekly_reward_role_id || '';
+    $('monthlyReward').value = s.monthly_reward_role_id || '';
     $('vanityRole').value = s.vanity_role_id || '';
     $('vanityCode').value = s.vanity_code || '';
     await loadLeaders();
   }
   async function loadLeaders() {
+    if (!$('guild').value) return;
     const data = await api(`/api/leaderboard?guildId=${encodeURIComponent($('guild').value)}&period=${$('period').value}`);
+    $('rewardInfo').textContent = `${data.reward} The current #1 member earns it when the leaderboard resets.`;
     $('leaders').replaceChildren();
     data.entries.forEach((entry, index) => {
-      const li = document.createElement('li');
+      const li = document.createElement('li'); li.className = 'leader-row';
       li.textContent = `${entry.name} — ${Math.floor(entry.milliseconds / 3600000)}h ${Math.floor(entry.milliseconds % 3600000 / 60000)}m`;
       $('leaders').append(li);
     });
     if (!data.entries.length) $('leaders').textContent = 'No activity recorded yet.';
+  }
+  function safeImage(input, target) {
+    const value = input.value.trim();
+    try {
+      const url = new URL(value);
+      if (['http:', 'https:'].includes(url.protocol)) { target.src = url.href; target.hidden = false; return; }
+    } catch {}
+    target.removeAttribute('src'); target.hidden = true;
+  }
+  function updatePreview() {
+    const color = /^#[0-9a-f]{6}$/i.test($('color').value) ? $('color').value : '#5865F2';
+    $('embedPreview').style.borderLeftColor = color;
+    $('previewAuthor').textContent = $('author').value || '';
+    $('previewAuthor').hidden = !$('author').value;
+    $('previewTitle').textContent = $('title').value || 'Embed title';
+    $('previewDescription').textContent = $('description').value || 'Your embed description will appear here.';
+    $('previewFooter').textContent = `${$('footer').value}${$('timestamp').checked ? `${$('footer').value ? ' • ' : ''}${new Date().toLocaleString()}` : ''}`;
+    $('previewFooter').hidden = !$('footer').value && !$('timestamp').checked;
+    safeImage($('thumbnailUrl'), $('previewThumbnail'));
+    safeImage($('imageUrl'), $('previewImage'));
   }
   $('connect').onclick = async () => {
     token = $('token').value.trim();
     try {
       const guilds = await api('/api/guilds');
       $('guild').replaceChildren(...guilds.map(g => { const o = document.createElement('option'); o.value = g.id; o.textContent = g.name; return o; }));
-      $('dashboard').hidden = false;
-      status('Connected.');
-      await loadSettings();
+      $('dashboard').hidden = false; status('Connected.'); await loadSettings();
     } catch (e) { status(e.message, true); }
   };
   $('guild').onchange = () => loadSettings().catch(e => status(e.message, true));
@@ -88,18 +125,23 @@
   $('save').onclick = async () => {
     try {
       await api(`/api/settings/${encodeURIComponent($('guild').value)}`, { method: 'PUT', body: JSON.stringify({
-        announcement_channel_id: $('announcement').value.trim() || null,
-        grind_role_id: $('grind').value.trim() || null,
-        vanity_role_id: $('vanityRole').value.trim() || null,
-        vanity_code: $('vanityCode').value.trim() || null
-      }) }); status('Settings saved.');
+        announcement_channel_id: $('announcement').value.trim() || null, grind_role_id: $('grind').value.trim() || null,
+        vanity_role_id: $('vanityRole').value.trim() || null, vanity_code: $('vanityCode').value.trim() || null,
+        weekly_reward_role_id: $('weeklyReward').value.trim() || null, monthly_reward_role_id: $('monthlyReward').value.trim() || null
+      }) }); status('Settings saved. The #1 leaderboard member receives the configured period reward at reset.'); await loadLeaders();
     } catch (e) { status(e.message, true); }
   };
   $('send').onclick = async () => {
     try {
-      await api('/api/embed', { method: 'POST', body: JSON.stringify({ guildId: $('guild').value, channelId: $('embedChannel').value.trim(), title: $('title').value, description: $('description').value, color: $('color').value.trim() }) });
-      status('Embed sent.');
+      await api('/api/embed', { method: 'POST', body: JSON.stringify({
+        guildId: $('guild').value, channelId: $('embedChannel').value.trim(), title: $('title').value,
+        description: $('description').value, color: $('color').value, author: $('author').value.trim(),
+        footer: $('footer').value.trim(), imageUrl: $('imageUrl').value.trim(), thumbnailUrl: $('thumbnailUrl').value.trim(), timestamp: $('timestamp').checked
+      }) }); status('Embed sent.');
     } catch (e) { status(e.message, true); }
   };
+  ['title','description','author','footer','color','imageUrl','thumbnailUrl','timestamp'].forEach(id => $(id).addEventListener('input', updatePreview));
+  $('timestamp').addEventListener('change', updatePreview);
+  updatePreview();
 </script></body>
 </html>
