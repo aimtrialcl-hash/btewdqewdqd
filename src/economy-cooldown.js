@@ -1,13 +1,12 @@
 // Shared 10-second prefix-command throttle and animated server-emoji renderer.
-// Discord message text can't display Google's emoji animations inline. Animated
-// server emojis are the supported animated emoji format; GIFs can be embed images.
+// Google emoji artwork cannot be posted as inline Discord emoji. Animated
+// custom server emojis are supported inline; GIF URLs can only be embed images.
 require('dotenv').config();
 const { Client, Message, EmbedBuilder } = require('discord.js');
 const { db } = require('./database');
 
 const COMMAND_COOLDOWN_MS = 10_000;
 const cooldowns = new Map();
-const editFrames = new Map();
 let emojiCursor = 0;
 const getPrefix = db.prepare('SELECT prefix FROM economy_guild_settings WHERE guild_id=?');
 const economyCommands = new Set([
@@ -33,24 +32,25 @@ function getCommand(message) {
   return economyCommands.has(command) ? { command, prefix } : null;
 }
 function makeAnimatedHelp(guild, prefix) {
-  const emoji = () => animatedMarkup(guild);
+  const icon = fallback => animatedMarkup(guild) || fallback;
   const lines = [
-    `${emoji()} **${prefix}daily** — claim 100–250 NxtCoin every 24h`,
-    `${emoji()} **${prefix}work** — earn 20–100 NxtCoin every 30m`,
-    `${emoji()} **${prefix}fish** — catch 15–90 NxtCoin every 15m`,
-    `${emoji()} **${prefix}scavenge** — find 40–160 NxtCoin every hour`,
-    `${emoji()} **${prefix}balance** [@member] — check a wallet`,
-    `${emoji()} **${prefix}pay** @member amount — transfer coins`,
-    `${emoji()} **${prefix}coinflip** amount heads|tails — flip for coins`,
-    `${emoji()} **${prefix}slots** amount — play the emoji slots`,
-    `${emoji()} **${prefix}rich** — see the server's top wallets`,
-    `${emoji()} **${prefix}prefix** <new> — change prefix (Manage Server)`
-  ].filter(line => !line.startsWith(' **'));
+    `${icon('🎁')} **${prefix}daily** — claim 100–250 NxtCoin every 24h`,
+    `${icon('💼')} **${prefix}work** — earn 20–100 NxtCoin every 30m`,
+    `${icon('🎣')} **${prefix}fish** — earn 15–90 NxtCoin every 15m`,
+    `${icon('🔎')} **${prefix}scavenge** — earn 40–160 NxtCoin every hour`,
+    `${icon('👛')} **${prefix}balance** [@member] — check a wallet`,
+    `${icon('💸')} **${prefix}pay** @member amount — transfer coins`,
+    `${icon('🪙')} **${prefix}coinflip** amount heads|tails — flip for coins`,
+    `${icon('🎰')} **${prefix}slots** amount — play the emoji slots`,
+    `${icon('🏆')} **${prefix}rich** — see the server's top wallets`,
+    `${icon('✨')} **${prefix}earn** — show all earning methods`,
+    `${icon('⚙️')} **${prefix}prefix** <new> — change prefix (Manage Server)`
+  ];
   const animatedAvailable = animatedEmojis(guild).length > 0;
   return new EmbedBuilder()
     .setColor(0x7C5CFC)
-    .setTitle(`${animatedMarkup(guild)} NxtCoin • Command guide`)
-    .setDescription(`${lines.join('\n')}\n\n${animatedAvailable ? '✨ Animated server emojis are active.' : 'Add animated custom emojis to this server and let the bot use them to show animated icons.'}\n⏱️ Shared command cooldown: **10 seconds**.`)
+    .setTitle(`${animatedMarkup(guild) || '🪙'} NxtCoin • Command guide`)
+    .setDescription(`${lines.join('\n')}\n\n⏱️ Shared command cooldown: **10 seconds**.\n${animatedAvailable ? 'Animated server emojis are being used above.' : 'For animated icons, add animated custom emojis to this server and allow the bot to use them. Google emoji animations are not available as inline Discord emojis.'}`)
     .setThumbnail(guild?.iconURL?.({ size: 128 }) || null)
     .setFooter({ text: `NxtCoin • Prefix: ${prefix}` })
     .setTimestamp();
@@ -75,8 +75,8 @@ function animatePayload(payload, guild) {
   return { ...payload, embeds: payload.embeds.map(embed => animateEmbed(embed, guild)) };
 }
 
-// Apply one shared 10-second cooldown per user/server and display a complete,
-// current help command once per cooldown window.
+// Apply one shared 10-second cooldown per user/server and show one notice per
+// window. Handle help here so the displayed guide always matches available commands.
 const originalEmit = Client.prototype.emit;
 Client.prototype.emit = function emitWithEconomyCooldown(event, ...args) {
   if (event === 'messageCreate') {
@@ -93,7 +93,7 @@ Client.prototype.emit = function emitWithEconomyCooldown(event, ...args) {
           const emoji = animatedMarkup(message.guild);
           const embed = new EmbedBuilder()
             .setColor(0xF0B232)
-            .setTitle(`${emoji ? `${emoji} ` : ''}Command cooldown`)
+            .setTitle(`${emoji ? `${emoji} ` : '⏳ '}Command cooldown`)
             .setDescription(`Please wait **${seconds} seconds** before using another NxtCoin command.`)
             .setFooter({ text: 'NxtCoin • Community economy' });
           void message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } }).catch(() => {});
@@ -119,7 +119,6 @@ if (Message?.prototype?.reply) {
 if (Message?.prototype?.edit) {
   const originalEdit = Message.prototype.edit;
   Message.prototype.edit = function editWithAnimatedEconomyEmojis(...args) {
-    editFrames.set(this, (editFrames.get(this) || 0) + 1);
     return originalEdit.call(this, animatePayload(args[0], this.guild), ...args.slice(1));
   };
 }
