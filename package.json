@@ -2,11 +2,11 @@
   "name": "discord-community-bot",
   "version": "1.0.0",
   "private": true,
-  "description": "Discord community bot with voice and message leaderboards and an authenticated admin dashboard.",
+  "description": "Discord community bot with voice and message leaderboards, an authenticated admin dashboard, and a NxtCoin economy.",
   "main": "src/index.js",
   "scripts": {
-    "start": "node --require ./src/rank-emojis.js src/index.js",
-    "dev": "node --watch --require ./src/rank-emojis.js src/index.js"
+    "start": "node --require ./src/rank-emojis.js --require ./src/economy.js src/index.js",
+    "dev": "node --watch --require ./src/rank-emojis.js --require ./src/economy.js src/index.js"
   },
   "engines": { "node": ">=22" },
   "dependencies": {
