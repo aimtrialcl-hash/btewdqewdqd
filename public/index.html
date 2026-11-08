@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Community Bot Dashboard</title>
+  <style>
+    :root{color-scheme:dark;--bg:#111318;--card:#1b1e27;--line:#303442;--text:#f4f5f8;--muted:#a9afbd;--accent:#7388ff}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,sans-serif}main{max-width:920px;margin:40px auto;padding:0 20px}h1{margin-bottom:4px}p,.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-top:18px}label{display:block;margin:12px 0 5px;color:var(--muted)}input,select,textarea,button{width:100%;padding:11px;border-radius:8px;border:1px solid var(--line);background:#12141a;color:var(--text);font:inherit}textarea{min-height:100px;resize:vertical}button{background:var(--accent);border:0;font-weight:700;cursor:pointer;margin-top:14px}button:hover{filter:brightness(1.1)}.inline{display:flex;gap:8px;align-items:end}.inline>*{flex:1}#status{min-height:24px;color:#8ee0a4}ol{padding-left:24px}li{padding:5px 0}.warning{border-left:3px solid #edb84c;padding-left:12px}
+  </style>
+</head>
+<body><main>
+  <h1>Community Bot</h1><p>Voice leaderboards, role settings, and embed announcements.</p>
+  <section class="card">
+    <h2>Connect dashboard</h2>
+    <p class="muted">Enter the dashboard token configured in Railway. It is kept in this browser tab and is not saved by the site.</p>
+    <label for="token">Dashboard token</label><input id="token" type="password" autocomplete="off" placeholder="DASHBOARD_TOKEN">
+    <button id="connect">Connect</button><div id="status" role="status"></div>
+  </section>
+  <div id="dashboard" hidden>
+    <div class="grid">
+      <section class="card"><h2>Leaderboard</h2>
+        <label for="guild">Server</label><select id="guild"></select>
+        <div class="inline"><div><label for="period">Period</label><select id="period"><option value="weekly">This week</option><option value="monthly">This month</option></select></div><div><button id="refresh">Refresh</button></div></div>
+        <ol id="leaders"></ol><p class="muted">Tracked voice time uses UTC periods and starts when the bot is online.</p>
+      </section>
+      <section class="card"><h2>Server settings</h2>
+        <label for="announcement">Announcement channel ID</label><input id="announcement" placeholder="Discord channel ID">
+        <label for="grind">Grind role ID</label><input id="grind" placeholder="Discord role ID">
+        <label for="vanityRole">Vanity reward role ID</label><input id="vanityRole" placeholder="Discord role ID">
+        <label for="vanityCode">Vanity claim code</label><input id="vanityCode" placeholder="The code members enter in /vanity claim">
+        <button id="save">Save settings</button>
+      </section>
+    </div>
+    <section class="card"><h2>Send embed</h2>
+      <label for="embedChannel">Channel ID</label><input id="embedChannel" placeholder="Discord channel ID">
+      <label for="title">Title</label><input id="title" maxlength="256">
+      <label for="description">Description</label><textarea id="description" maxlength="4000"></textarea>
+      <label for="color">Hex color</label><input id="color" value="#5865F2" maxlength="7">
+      <button id="send">Send embed</button>
+    </section>
+    <section class="card warning"><strong>Bot-add controls</strong><p>Use <code>/botaccess</code> in Discord to enable best-effort monitoring and manage the inviter whitelist. Discord does not allow bots to prevent an app install before it happens.</p></section>
+  </div>
+</main>
+<script>
+  const $ = id => document.getElementById(id);
+  let token = '';
+  async function api(url, options = {}) {
+    const response = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, ...(options.headers || {}) } });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
+    return data;
+  }
+  function status(text, error = false) { $('status').textContent = text; $('status').style.color = error ? '#ff8585' : '#8ee0a4'; }
+  async function loadSettings() {
+    const guildId = $('guild').value;
+    if (!guildId) return;
+    const s = await api(`/api/settings/${encodeURIComponent(guildId)}`);
+    $('announcement').value = s.announcement_channel_id || '';
+    $('grind').value = s.grind_role_id || '';
+    $('vanityRole').value = s.vanity_role_id || '';
+    $('vanityCode').value = s.vanity_code || '';
+    await loadLeaders();
+  }
+  async function loadLeaders() {
+    const data = await api(`/api/leaderboard?guildId=${encodeURIComponent($('guild').value)}&period=${$('period').value}`);
+    $('leaders').replaceChildren();
+    data.entries.forEach((entry, index) => {
+      const li = document.createElement('li');
+      li.textContent = `${entry.name} — ${Math.floor(entry.milliseconds / 3600000)}h ${Math.floor(entry.milliseconds % 3600000 / 60000)}m`;
+      $('leaders').append(li);
+    });
+    if (!data.entries.length) $('leaders').textContent = 'No activity recorded yet.';
+  }
+  $('connect').onclick = async () => {
+    token = $('token').value.trim();
+    try {
+      const guilds = await api('/api/guilds');
+      $('guild').replaceChildren(...guilds.map(g => { const o = document.createElement('option'); o.value = g.id; o.textContent = g.name; return o; }));
+      $('dashboard').hidden = false;
+      status('Connected.');
+      await loadSettings();
+    } catch (e) { status(e.message, true); }
+  };
+  $('guild').onchange = () => loadSettings().catch(e => status(e.message, true));
+  $('period').onchange = () => loadLeaders().catch(e => status(e.message, true));
+  $('refresh').onclick = () => loadLeaders().catch(e => status(e.message, true));
+  $('save').onclick = async () => {
+    try {
+      await api(`/api/settings/${encodeURIComponent($('guild').value)}`, { method: 'PUT', body: JSON.stringify({
+        announcement_channel_id: $('announcement').value.trim() || null,
+        grind_role_id: $('grind').value.trim() || null,
+        vanity_role_id: $('vanityRole').value.trim() || null,
+        vanity_code: $('vanityCode').value.trim() || null
+      }) }); status('Settings saved.');
+    } catch (e) { status(e.message, true); }
+  };
+  $('send').onclick = async () => {
+    try {
+      await api('/api/embed', { method: 'POST', body: JSON.stringify({ guildId: $('guild').value, channelId: $('embedChannel').value.trim(), title: $('title').value, description: $('description').value, color: $('color').value.trim() }) });
+      status('Embed sent.');
+    } catch (e) { status(e.message, true); }
+  };
+</script></body>
+</html>
